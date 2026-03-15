@@ -1,65 +1,66 @@
 Java.performNow(function () {
+  // console.log("[*] Avvio bypass dinamico definitivo - Caccia globale a $$a...");
 
-  // Blocca solo $$a dei vettori noti - necessario per il boot iniziale
-  var BLACKLIST_INVOKE = [
-    "com.bumptech.glide.load.engine.bitmap_recycle.LruArrayPool$Key",
-    "ch.qos.logback.classic.joran.action.ConditionalIncludeAction$State",
-    "com.google.android.gms.internal.mlkit_vision_barcode.zzrh"
-  ];
-
+  // 1. Intercettiamo le chiamate tramite Reflection
   var Method = Java.use("java.lang.reflect.Method");
   Method.invoke.implementation = function (obj, args) {
     var methodName = this.getName();
-    var declaring = this.getDeclaringClass().getName();
-    if (methodName === "$$a" && BLACKLIST_INVOKE.indexOf(declaring) !== -1) {
-      console.log("[*] Bloccato $$a: " + declaring);
-      return null;
+    var declaringClass = this.getDeclaringClass().getName();
+
+    // Invece di una blacklist, blocchiamo QUALSIASI metodo chiamato "$$a"
+    // Questo trancia alla radice l'albero di esecuzione del packer
+    if (methodName === "$$a") {
+      // console.log("[*] BOOM! Disinnescata chiamata nascosta $$a in: " + declaringClass);
+      return null; // Blocca l'esecuzione ritornando null
     }
+
     return this.invoke(obj, args);
   };
 
-  // Aspetta che ScrtyManager venga caricata e blocca tutte le callback
-  Java.use("java.lang.ClassLoader")
-    .loadClass.overload("java.lang.String")
-    .implementation = function (name) {
-      var clazz = this.loadClass(name);
-      if (name === "com.hitachiapp.utils.ScrtyManager") {
-        console.log("[*] ScrtyManager caricata - blocco tutte le callback");
-        var SM = Java.use("com.hitachiapp.utils.ScrtyManager");
-
-        SM.hkCallback.implementation = function (j, j2) {
-          console.log("[*] hkCallback BLOCCATA - hook detection");
-        };
-        SM.dbgCallback.implementation = function (j, j2) {
-          console.log("[*] dbgCallback BLOCCATA - debug detection");
-        };
-        SM.rtCallback.implementation = function (j) {
-          console.log("[*] rtCallback BLOCCATA - root detection");
-        };
-        SM.mltrCallback.implementation = function (j, j2) {
-          console.log("[*] mltrCallback BLOCCATA - emulator detection");
-        };
-        SM.crtfcttmprCallback.implementation = function (j, j2) {
-          console.log("[*] crtfcttmprCallback BLOCCATA - cert tampering");
-        };
-
-        // Rimuovi hook Method.invoke - non serve piu
-        Method.invoke.implementation = null;
-        console.log("[*] Hook Method.invoke rimosso");
-      }
-      return clazz;
-    };
-
+  // 2. Setup del ClassLoader e bypass di ScrtyManager
   var Application = Java.use("android.app.Application");
   Application.attachBaseContext.implementation = function (ctx) {
-    console.log("[*] attachBaseContext - inizio");
+    // console.log("[*] attachBaseContext - inizio");
+
+    // Impostiamo il ClassLoader di Frida su quello reale dell'app
+    var contextClass = Java.use("android.content.Context");
+    var appClassLoader = Java.cast(ctx, contextClass).getClassLoader();
+    Java.classFactory.loader = appClassLoader;
+
+    // Hook di ScrtyManager
+    try {
+      var SM = Java.use("com.hitachiapp.utils.ScrtyManager");
+      // console.log("[*] ScrtyManager trovato! Applico i bypass...");
+
+      SM.hkCallback.implementation = function (j, j2) {
+        // console.log("[*] hkCallback BLOCCATA");
+      };
+      SM.dbgCallback.implementation = function (j, j2) {
+        // console.log("[*] dbgCallback BLOCCATA");
+      };
+      SM.rtCallback.implementation = function (j) {
+        // console.log("[*] rtCallback BLOCCATA");
+      };
+      SM.mltrCallback.implementation = function (j, j2) {
+        // console.log("[*] mltrCallback BLOCCATA");
+      };
+      SM.crtfcttmprCallback.implementation = function (j, j2) {
+        // console.log("[*] crtfcttmprCallback BLOCCATA");
+      };
+
+      // console.log("[*] Tutte le callback neutralizzate!");
+    } catch (e) {
+      // console.log("[-] Impossibile hookare ScrtyManager: " + e);
+    }
+
+    // Proseguiamo l'avvio
     try {
       this.attachBaseContext(ctx);
-      console.log("[*] attachBaseContext - completata");
+      // console.log("[*] attachBaseContext - completata con successo");
     } catch (e) {
-      console.log("[*] attachBaseContext - eccezione soppressa: " + e);
+      // console.log("[-] Eccezione in attachBaseContext: " + e);
     }
   };
 
-  console.log("[*] Hook attivi");
+  console.log("[*] Hook attivi, in attesa del boot...");
 });
